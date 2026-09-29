@@ -29,4 +29,4 @@ Reference: Long, D., & Magerko, B. (2020). What is AI literacy? competencies and
 ## Tech Stack  
 - **Python**  
 - **Streamlit** – for building a clean and interactive web interface  
-- **Google gemini-2.0-flash API** – for dynamic question generation & personalized recommendations  
+- **Google gemini-2.5-flash API** – for dynamic question generation & personalized recommendations  
