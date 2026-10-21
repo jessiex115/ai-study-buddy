@@ -327,12 +327,26 @@ Be encouraging, specific, and transparent when evidence is limited."""
                 else:
                     st.warning("Gemini did not return feedback. Please try again.")
             except Exception as error:
-                st.warning(explain_api_error(error))
-                st.info("Your journal summary and submitted assessment results above remain available without AI.")
-
-    if st.session_state.feedback_text:
-        st.subheader("Personalized Feedback Report")
-        st.markdown(st.session_state.feedback_text)
+                import logging
+                
+                logging.exception("Comprehensive feedback generation failed")
+                
+                error_type = type(error).__name__
+                error_code = getattr(error, "code", None)
+                error_status = getattr(error, "status", None)
+                
+                st.error(f"Report generation failed: {error_type}")
+                
+                if error_code is not None:
+                    st.error(f"HTTP Error Code: {error_code}")
+                
+                if error_status is not None:
+                    st.error(f"API Status: {error_status}")
+                
+                st.info(
+                    "Check the Streamlit application logs "
+                    "for the detailed error."
+                )
 
 else:
     st.info("Please select a module above to begin your reflection.")
