@@ -8,6 +8,7 @@ Session data is temporary and is not a validated AI-literacy assessment.
 import json
 import logging
 import re
+from time import perf_counter
 from datetime import datetime
 from html import escape
 
@@ -17,7 +18,7 @@ from google.genai import types
 
 MODEL_NAME = "gemini-3.8-flash"
 QUESTION_COUNT = 8
-API_TIMEOUT_MS = 30000  # SDK timeout value is in milliseconds.
+API_TIMEOUT_MS = 20000  # Per-attempt request timeout in milliseconds.
 logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AI Usage Reflection", layout="wide")
@@ -36,20 +37,26 @@ st.markdown(
 
 # -------------------------- Gemini helpers --------------------------
 
-def generate_ai_text(prompt: str) -> str:
-    """Call the Interactions API; never expose the API key in the interface."""
+def generate_ai_text(prompt: str, thinking_level: str = "low") -> str:
+    """Call Gemini once with a finite HTTP timeout and no automatic retries."""
     api_key = st.secrets.get("google", {}).get("api_key")
     if not api_key:
         raise RuntimeError("Gemini API key not configured in Streamlit Secrets")
 
     client = genai.Client(
         api_key=api_key,
-        http_options=types.HttpOptions(timeout=API_TIMEOUT_MS),
+        http_options=types.HttpOptions(
+            timeout=API_TIMEOUT_MS,
+            # SDK default is up to five attempts. With slow or failing free-tier
+            # calls that can make the Streamlit spinner last several minutes.
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
     )
     response = client.interactions.create(
         model=MODEL_NAME,
         input=prompt,
         store=False,
+        generation_config={"thinking_level": thinking_level},
     )
     return response.output_text or ""
 
@@ -179,6 +186,10 @@ def init_session_state():
         "question_source": "",
         "assessment_issue": None,
         "report_issue": None,
+        "api_test_issue": None,
+        "api_test_result": "",
+        "last_assessment_seconds": None,
+        "last_report_seconds": None,
         "user_answers": {},
         "assessment_submitted": False,
         "assessment_version": 0,
@@ -268,11 +279,38 @@ elif st.session_state.selected_module == "assessment":
 
     if not st.session_state.habit_questions:
         st.write("Choose how you'd like to start:")
-        left, right = st.columns(2)
+        left, middle, right = st.columns(3)
         with left:
+            test_api = st.button("Test Gemini Connection", use_container_width=True)
+        with middle:
             use_gemini = st.button("Generate Questions with Gemini", type="primary", use_container_width=True)
         with right:
             use_predefined = st.button("Use Predefined Questions (Instant)", use_container_width=True)
+
+        if st.session_state.api_test_result:
+            st.success(st.session_state.api_test_result)
+        if st.session_state.api_test_issue:
+            show_diagnostics(st.session_state.api_test_issue, "Connection test")
+
+        if test_api:
+            started = perf_counter()
+            st.session_state.api_test_result = ""
+            st.session_state.api_test_issue = None
+            with st.spinner("Testing a very short Gemini request..."):
+                try:
+                    result = generate_ai_text("Reply with only the word OK.")
+                    if not result.strip():
+                        raise ValueError("Gemini returned no text")
+                except Exception as error:
+                    logger.exception("Gemini connection test failed")
+                    st.session_state.api_test_issue = diagnostic_details(error, "api_request")
+                else:
+                    elapsed = perf_counter() - started
+                    st.session_state.api_test_result = (
+                        f"Gemini API returned a response in {elapsed:.1f}s. "
+                        "The API key, model and simple request worked."
+                    )
+            st.rerun()
 
         if use_predefined:
             set_questions(FALLBACK_QUESTIONS, "Predefined (chosen by user)")
@@ -287,7 +325,8 @@ reflective). Choices should be plausible and distinct, not reverse-coded.
 Respond ONLY as JSON with a 'questions' list of exactly {QUESTION_COUNT} objects.
 Each object has a 'question' string and an 'options' list containing four strings,
 starting with 'A. ', 'B. ', 'C. ', 'D. ' respectively."""
-            with st.spinner("Contacting Gemini and generating questions..."):
+            started = perf_counter()
+            with st.spinner("Contacting Gemini and generating questions (single attempt)..."):
                 try:
                     raw_response = generate_ai_text(prompt)
                 except Exception as error:
@@ -314,6 +353,7 @@ starting with 'A. ', 'B. ', 'C. ', 'D. ' respectively."""
                             )
                         else:
                             set_questions(parsed, "Gemini AI (generated successfully)")
+            st.session_state.last_assessment_seconds = perf_counter() - started
             st.rerun()
 
     else:
@@ -324,6 +364,8 @@ starting with 'A. ', 'B. ', 'C. ', 'D. ' respectively."""
             st.info(f"Question source: {st.session_state.question_source or 'Unknown'}")
         if st.session_state.assessment_issue:
             show_diagnostics(st.session_state.assessment_issue, "Assessment generation")
+        if st.session_state.last_assessment_seconds is not None:
+            st.caption(f"Last Gemini generation attempt: {st.session_state.last_assessment_seconds:.1f}s")
         st.caption(f"{len(st.session_state.habit_questions)} questions. Select an answer for each.")
 
         with st.form("assessment_form"):
@@ -430,9 +472,10 @@ Use these five headings:
 5. Suggested Tools and Resources
 Keep the feedback actionable and acknowledge limitations of the available data."""
             st.session_state.report_issue = None
-            with st.spinner("Generating personalized feedback with Gemini..."):
+            started = perf_counter()
+            with st.spinner("Generating personalized feedback with Gemini (single attempt)..."):
                 try:
-                    generated = generate_ai_text(prompt)
+                    generated = generate_ai_text(prompt, thinking_level="low")
                 except Exception as error:
                     logger.exception("Personal report Gemini API request failed")
                     st.session_state.feedback_text = ""
@@ -447,7 +490,10 @@ Keep the feedback actionable and acknowledge limitations of the available data."
                             "phase": "empty_response", "type": "EmptyResponse",
                             "http_code": "Not available", "api_status": "Not available",
                         }
+            st.session_state.last_report_seconds = perf_counter() - started
 
+    if st.session_state.last_report_seconds is not None:
+        st.caption(f"Last Gemini report attempt: {st.session_state.last_report_seconds:.1f}s")
     if st.session_state.report_issue:
         show_diagnostics(st.session_state.report_issue, "Personal report")
         st.info("Your journal summary and assessment results above still work without Gemini.")
