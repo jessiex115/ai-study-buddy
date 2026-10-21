@@ -225,7 +225,18 @@ Return {QUESTION_COUNT} question objects, each with four complete options."""
                 st.session_state.assessment_version += 1
                 st.rerun()
     else:
-        st.caption(f"{len(st.session_state.habit_questions)} questions. Choose one answer for each.")
+    if st.session_state.habit_questions == FALLBACK_QUESTIONS:
+        st.warning(
+            "Using predefined questions (AI generation was unavailable)."
+        )
+    else:
+        st.success(
+            "Questions generated successfully by Gemini AI."
+        )
+
+    st.caption(
+        f"{len(st.session_state.habit_questions)} questions. Choose one answer for each."
+    )    
         with st.form("assessment_form"):
             for idx, question in enumerate(st.session_state.habit_questions):
                 st.markdown(f"**{idx + 1}. {question['text']}**")
