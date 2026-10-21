@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from datetime import datetime
 
 # Page Configuration
@@ -41,6 +41,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+def generate_ai_text(prompt):
+    client = genai.Client(
+        api_key=st.secrets["google"]["api_key"]
+    )
+
+    response = client.interactions.create(
+        model="gemini-3.8-flash",
+        input=prompt,
+        store=False
+    )
+
+    return response.output_text or ""
+
 # Initialize session state
 def init_session_state():
     session_defaults = {
@@ -57,7 +70,7 @@ def init_session_state():
     for key, value in session_defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
-
+            
 init_session_state()
 
 # Page Header
@@ -151,10 +164,7 @@ elif st.session_state.selected_module == "assessment":
         st.info("Generate questions to begin your assessment.")
         if st.button("Generate Assessment Questions"):
             try:
-                genai.configure(api_key=st.secrets["google"]["api_key"])
-                model = genai.GenerativeModel("gemini-2.5-flash") # Make sure model name is correct
-
-                prompt = """Generate exactly 5 multiple-choice questions about AI usage habits for students. 
+                prompt = """Generate exactly 8 multiple-choice questions about AI usage habits for students. 
                 Each question should have 4 options (A-D).
                 
                 STRICT FORMAT:
@@ -166,13 +176,13 @@ elif st.session_state.selected_module == "assessment":
                 """
                 
                 with st.spinner("Generating personalized questions..."):
-                    response = model.generate_content(prompt)
+                    response_text = generate_ai_text(prompt)
                     
-                    if response.text:
+                    if response_text:
                         questions = []
                         current_question = {}
                         
-                        for line in response.text.split('\n'):
+                        for line in response_text.split('\n'):
                             line = line.strip()
                             
                             # FIX 1: Looser check for "Question:" (handles "1. Question:" or "**Question:**")
@@ -325,9 +335,6 @@ elif st.session_state.selected_module == "report":
     if st.button("Generate Comprehensive Feedback", type="primary"):
         if st.session_state.journal_entries or st.session_state.habit_questions:
             try:
-                genai.configure(api_key=st.secrets["google"]["api_key"])
-                model = genai.GenerativeModel("gemini-2.5-flash")
-                
                 journal_context = "\n".join(
                     f"Entry {idx+1} ({entry['date']}): Task: {entry['task']}, Tool: {entry['tool']}, Usage: {entry['usage']}"
                     for idx, entry in enumerate(st.session_state.journal_entries)
@@ -358,12 +365,12 @@ elif st.session_state.selected_module == "report":
                 """
                 
                 with st.spinner("Analyzing your usage patterns..."):
-                    response = model.generate_content(prompt)
-                    if response.text:
+                    feedback_text = generate_ai_text(prompt)
+                    if feedback_text:
                         st.subheader("Personalized Feedback Report")
-                        st.markdown(response.text)
-                    else:
-                        st.error("Could not generate feedback. Please try again.")
+                        st.markdown(feedback_text)
+        else:
+        st.error("Could not generate feedback. Please try again.")
             except Exception as e:
                 st.error(f"An error occurred: {str(e)}")
         else:
