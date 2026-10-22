@@ -245,9 +245,9 @@ st.markdown("---")
 if st.session_state.selected_module == "experience":
     st.header("Usage Experience Journal")
     with st.form("journal_form"):
-        st.text_area("1. What learning task did you use AI for?", key="journal_task")
-        st.text_area("2. Which AI tool did you use?", key="journal_tool")
-        st.text_area("3. How did you use it?", key="journal_usage")
+        st.text_area("1. What learning task did you use AI for?", key="journal_task", placeholder="e.g., reading a long academic article, writing the abstract of an essay, debugging my code")
+        st.text_area("2. Which AI tool did you use?", key="journal_tool", placeholder="e.g., ChatGPT, Google Gemini, Claude")
+        st.text_area("3. How did you use it?", key="journal_usage", placeholder="e.g., I asked AI to summarize key ideas, brainstorm an outline, or explain a difficult concept")
         save = st.form_submit_button("Save Entry")
 
     if save:
