@@ -38,27 +38,34 @@ st.markdown(
 # -------------------------- Gemini helpers --------------------------
 
 def generate_ai_text(prompt: str, thinking_level: str = "low") -> str:
-    """Call Gemini once with a finite HTTP timeout and no automatic retries."""
+    """Generate text using Gemini's generateContent API."""
+
     api_key = st.secrets.get("google", {}).get("api_key")
+
     if not api_key:
-        raise RuntimeError("Gemini API key not configured in Streamlit Secrets")
+        raise RuntimeError(
+            "Gemini API key not configured in Streamlit Secrets"
+        )
 
     client = genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
-            timeout=API_TIMEOUT_MS,
-            # SDK default is up to five attempts. With slow or failing free-tier
-            # calls that can make the Streamlit spinner last several minutes.
-            retry_options=types.HttpRetryOptions(attempts=1),
+            timeout=20000,
+            retry_options=types.HttpRetryOptions(attempts=1)
         ),
     )
-    response = client.interactions.create(
+
+    response = client.models.generate_content(
         model=MODEL_NAME,
-        input=prompt,
-        store=False,
-        generation_config={"thinking_level": thinking_level},
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(
+                thinking_level=thinking_level
+            )
+        ),
     )
-    return response.output_text or ""
+
+    return response.text or ""
 
 
 def diagnostic_details(error: Exception, phase: str) -> dict:
