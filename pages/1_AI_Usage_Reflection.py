@@ -16,7 +16,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-MODEL_NAME = "gemini-3.8-flash"
+MODEL_NAME = "gemini-3.5-flash-lite"
 QUESTION_COUNT = 8
 API_TIMEOUT_MS = 20000  # Per-attempt request timeout in milliseconds.
 logger = logging.getLogger(__name__)
